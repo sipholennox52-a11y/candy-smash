@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>Candy Blast Saga</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <header id="topbar">
+      <div class="stat" id="lives-stat" title="Lives">
+        <span class="icon">❤️</span><span id="lives-count">5</span>
+        <span id="life-timer" class="timer"></span>
+        <button class="plus-btn" data-open="shop" data-tab="lives">+</button>
+      </div>
+      <div class="stat" id="level-stat"><span class="icon">🏆</span>Level <span id="level-num">1</span></div>
+      <div class="stat" id="coins-stat" title="Coins">
+        <span class="icon">🪙</span><span id="coins-count">50</span>
+        <button class="plus-btn" data-open="shop" data-tab="coins">+</button>
+      </div>
+    </header>
+
+    <section id="hud">
+      <div class="hud-item"><div class="hud-label">Target</div><div class="hud-value" id="target-score">1000</div></div>
+      <div class="hud-item"><div class="hud-label">Score</div><div class="hud-value" id="score">0</div></div>
+      <div class="hud-item"><div class="hud-label">Moves</div><div class="hud-value" id="moves">20</div></div>
+    </section>
+    <div id="progress-wrap"><div id="progress-bar"></div></div>
+
+    <canvas id="board" width="480" height="480"></canvas>
+
+    <section id="boosters">
+      <button class="booster" id="booster-hammer" title="Hammer: smash any candy">🔨<span class="booster-count" id="hammer-count">1</span></button>
+      <button class="booster" id="booster-bomb" title="Bomb: blast a 3x3 area">💣<span class="booster-count" id="bomb-count">1</span></button>
+      <button class="booster" id="booster-shuffle" title="Shuffle the board">🔀<span class="booster-count" id="shuffle-count">1</span></button>
+      <button class="booster shop-cta" data-open="shop" data-tab="boosters">🛒 Shop</button>
+    </section>
+  </div>
+
+  <!-- Shop modal -->
+  <div class="modal hidden" id="shop-modal">
+    <div class="modal-card">
+      <button class="close-btn" data-close>✕</button>
+      <h2>🍬 Candy Shop</h2>
+      <div id="sale-banner">🔥 LIMITED TIME: +50% bonus coins! Ends in <span id="sale-timer">09:59</span></div>
+      <div class="shop-tabs">
+        <button class="tab active" data-tab="coins">Coins</button>
+        <button class="tab" data-tab="lives">Lives</button>
+        <button class="tab" data-tab="boosters">Boosters</button>
+      </div>
+      <div class="shop-grid" id="shop-grid"></div>
+      <p class="shop-note">Purchases are simulated in this demo. Connect Stripe / Google Play Billing / Apple IAP in production.</p>
+    </div>
+  </div>
+
+  <!-- Out of moves modal -->
+  <div class="modal hidden" id="oom-modal">
+    <div class="modal-card">
+      <h2>😱 Out of Moves!</h2>
+      <p>You're <b id="oom-remaining"></b> points away from winning. Don't lose your progress!</p>
+      <button class="cta-btn" id="buy-moves-btn">➕ Get 5 more moves — 🪙 100</button>
+      <button class="ghost-btn" id="give-up-btn">Give up (lose 1 ❤️)</button>
+    </div>
+  </div>
+
+  <!-- Level complete modal -->
+  <div class="modal hidden" id="win-modal">
+    <div class="modal-card">
+      <h2>🎉 Level Complete!</h2>
+      <div class="stars" id="win-stars">⭐⭐⭐</div>
+      <p id="win-text"></p>
+      <button class="cta-btn" id="next-level-btn">Next Level ➡️</button>
+      <button class="ghost-btn" data-open="shop" data-tab="boosters">Stock up on boosters</button>
+    </div>
+  </div>
+
+  <!-- Out of lives modal -->
+  <div class="modal hidden" id="lives-modal">
+    <div class="modal-card">
+      <h2>💔 Out of Lives!</h2>
+      <p>Next life in <span id="lives-modal-timer"></span></p>
+      <button class="cta-btn" data-open="shop" data-tab="lives">Refill lives now 🪙</button>
+      <button class="ghost-btn" data-close>Wait</button>
+    </div>
+  </div>
+
+  <!-- Purchase confirmation toast -->
+  <div id="toast" class="hidden"></div>
+
+  <script src="game.js"></script>
+</body>
+</html>
