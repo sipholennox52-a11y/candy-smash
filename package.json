@@ -1,0 +1,19 @@
+{
+  "name": "candy-blast",
+  "version": "1.0.0",
+  "description": "An addictive Candy Crush–style match-3 web game designed with a monetization funnel to turn players into buyers.",
+  "main": "game.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@capacitor/cli": "^7.6.7"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/core": "^8.4.1"
+  }
+}
