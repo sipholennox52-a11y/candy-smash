@@ -2,14 +2,25 @@
 
 An addictive Candy Crush–style match-3 web game designed with a monetization funnel to turn players into buyers.
 
-## Play
+## Play (web)
 
-Open `index.html` in any browser (no build step), or serve it:
+Serve the `www/` folder:
 
 ```bash
-python3 -m http.server 8000
+cd www && python3 -m http.server 8000
 # open http://localhost:8000
 ```
+
+## Android app (Capacitor)
+
+```bash
+npm install
+npx cap sync android
+cd android && ./gradlew assembleDebug
+# APK at android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+Requires JDK 21 and the Android SDK (platform 34).
 
 ## Gameplay
 
