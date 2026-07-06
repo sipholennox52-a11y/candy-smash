@@ -4,7 +4,8 @@
   "description": "An addictive Candy Crush–style match-3 web game designed with a monetization funnel to turn players into buyers.",
   "main": "game.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage"
   },
   "keywords": [],
   "author": "",

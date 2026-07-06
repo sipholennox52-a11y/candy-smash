@@ -1,5 +1,8 @@
 /* Candy Blast Saga — match-3 game with monetization funnel */
 (() => {
+  const L = (typeof CandyLogic !== 'undefined')
+    ? CandyLogic
+    : (typeof require !== 'undefined' ? require('./logic.js') : {});
   const COLS = 8, ROWS = 8, TYPES = 6;
   const EMOJI = ['🍬', '🍭', '🍫', '🍩', '🧁', '🍪'];
   const COLORS = ['#ff4e83', '#f9d423', '#8e5a3b', '#c86bfa', '#4ecdc4', '#ff9f43'];
@@ -19,8 +22,7 @@
   let S = load();
   function load() {
     try {
-      const raw = localStorage.getItem('candyblast');
-      return raw ? Object.assign({}, defaults, JSON.parse(raw)) : { ...defaults };
+      return L.mergeSave(defaults, localStorage.getItem('candyblast'));
     } catch { return { ...defaults }; }
   }
   function save() { localStorage.setItem('candyblast', JSON.stringify(S)); }
@@ -29,29 +31,16 @@
   let grid = [], score = 0, moves = 0, target = 0;
   let selected = null, armedBooster = null, busy = false, levelOver = false;
 
-  function levelConfig(n) {
-    return { target: 800 + n * 400, moves: Math.max(12, 24 - Math.floor(n / 3)) };
-  }
-
   function startLevel() {
-    const cfg = levelConfig(S.level);
+    const cfg = L.levelConfig(S.level);
     target = cfg.target; moves = cfg.moves; score = 0;
     selected = null; armedBooster = null; levelOver = false;
     grid = [];
     for (let r = 0; r < ROWS; r++) {
       grid.push([]);
-      for (let c = 0; c < COLS; c++) grid[r].push(randNoMatch(r, c));
+      for (let c = 0; c < COLS; c++) grid[r].push(L.randNoMatch(grid, r, c, TYPES));
     }
     updateHUD(); draw();
-  }
-  function randNoMatch(r, c) {
-    let t;
-    do { t = (Math.random() * TYPES) | 0; }
-    while (
-      (c >= 2 && grid[r][c - 1] === t && grid[r][c - 2] === t) ||
-      (r >= 2 && grid[r - 1][c] === t && grid[r - 2][c] === t)
-    );
-    return t;
   }
 
   // ---------- rendering ----------
@@ -79,26 +68,7 @@
   }
 
   // ---------- match logic ----------
-  function findMatches() {
-    const hit = new Set();
-    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS - 2; c++) {
-      const t = grid[r][c];
-      if (t !== null && t === grid[r][c + 1] && t === grid[r][c + 2]) {
-        let e = c + 2;
-        while (e + 1 < COLS && grid[r][e + 1] === t) e++;
-        for (let i = c; i <= e; i++) hit.add(r + ',' + i);
-      }
-    }
-    for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS - 2; r++) {
-      const t = grid[r][c];
-      if (t !== null && t === grid[r + 1][c] && t === grid[r + 2][c]) {
-        let e = r + 2;
-        while (e + 1 < ROWS && grid[e + 1][c] === t) e++;
-        for (let i = r; i <= e; i++) hit.add(i + ',' + c);
-      }
-    }
-    return [...hit].map(s => { const [r, c] = s.split(',').map(Number); return { r, c }; });
-  }
+  function findMatches() { return L.findMatches(grid); }
 
   async function resolveBoard(chain = 1) {
     const matches = findMatches();
@@ -109,14 +79,7 @@
     matches.forEach(p => { grid[p.r][p.c] = null; });
     draw();
     await sleep(120);
-    // gravity
-    for (let c = 0; c < COLS; c++) {
-      let write = ROWS - 1;
-      for (let r = ROWS - 1; r >= 0; r--) {
-        if (grid[r][c] !== null) { grid[write][c] = grid[r][c]; write--; }
-      }
-      for (let r = write; r >= 0; r--) grid[r][c] = (Math.random() * TYPES) | 0;
-    }
+    L.collapse(grid, TYPES);
     draw();
     updateHUD();
     await sleep(140);
@@ -136,17 +99,13 @@
     checkEnd();
     busy = false;
   }
-  function swap(a, b) {
-    const t = grid[a.r][a.c];
-    grid[a.r][a.c] = grid[b.r][b.c];
-    grid[b.r][b.c] = t;
-  }
+  function swap(a, b) { L.swap(grid, a, b); }
 
   function checkEnd() {
     if (levelOver) return;
     if (score >= target) {
       levelOver = true;
-      const stars = score >= target * 1.5 ? 3 : score >= target * 1.2 ? 2 : 1;
+      const stars = L.computeStars(score, target);
       document.getElementById('win-stars').textContent = '⭐'.repeat(stars);
       const coinsEarned = 20 + stars * 10;
       S.coins += coinsEarned; save();
@@ -194,9 +153,7 @@
     }
     dragStart = null;
   });
-  function isAdjacent(a, b) {
-    return Math.abs(a.r - b.r) + Math.abs(a.c - b.c) === 1;
-  }
+  function isAdjacent(a, b) { return L.isAdjacent(a, b); }
 
   // ---------- boosters ----------
   const boosterBtns = { hammer: 'booster-hammer', bomb: 'booster-bomb', shuffle: 'booster-shuffle' };
@@ -236,12 +193,7 @@
     }
     draw();
     await sleep(150);
-    for (let c = 0; c < COLS; c++) {
-      let write = ROWS - 1;
-      for (let r = ROWS - 1; r >= 0; r--)
-        if (grid[r][c] !== null) { grid[write][c] = grid[r][c]; write--; }
-      for (let r = write; r >= 0; r--) grid[r][c] = (Math.random() * TYPES) | 0;
-    }
+    L.collapse(grid, TYPES);
     draw();
     await resolveBoard();
     updateHUD();
@@ -346,10 +298,15 @@
   });
 
   // ---------- lives ----------
-  function loseLife() { S.lives = Math.max(0, S.lives - 1); if (S.lives < MAX_LIVES) S.lastLifeAt = Date.now(); save(); updateHUD(); }
+  function loseLife() {
+    const next = L.loseLife(S, Date.now(), MAX_LIVES);
+    S.lives = next.lives; S.lastLifeAt = next.lastLifeAt;
+    save(); updateHUD();
+  }
   function tickLives() {
-    if (S.lives < MAX_LIVES && Date.now() - S.lastLifeAt >= LIFE_REGEN_MS) {
-      S.lives++; S.lastLifeAt = Date.now(); save();
+    const next = L.regenLives(S, Date.now(), LIFE_REGEN_MS, MAX_LIVES);
+    if (next.added > 0) {
+      S.lives = next.lives; S.lastLifeAt = next.lastLifeAt; save();
       if (!document.getElementById('lives-modal').classList.contains('hidden') && S.lives > 0) {
         closeModal('lives-modal'); startLevel();
       }
@@ -401,10 +358,7 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => t.classList.add('hidden'), 2200);
   }
-  function fmt(ms) {
-    const s = Math.ceil(ms / 1000);
-    return `${String((s / 60) | 0).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-  }
+  function fmt(ms) { return L.fmt(ms); }
   function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
 
   // ---------- boot ----------
