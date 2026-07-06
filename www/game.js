@@ -6,7 +6,21 @@
   const LIFE_REGEN_MS = 60 * 1000; // 1 min for demo; 30 min in production
   const MAX_LIVES = 5;
 
-  const canvas = document.getElementById('board');
+  // ---------- shared DOM / grid helpers ----------
+  const $ = (id) => document.getElementById(id);
+  const randType = () => (Math.random() * TYPES) | 0;
+  // drop remaining candies down each column and refill the gaps from the top
+  function applyGravity() {
+    for (let c = 0; c < COLS; c++) {
+      let write = ROWS - 1;
+      for (let r = ROWS - 1; r >= 0; r--) {
+        if (grid[r][c] !== null) { grid[write][c] = grid[r][c]; write--; }
+      }
+      for (let r = write; r >= 0; r--) grid[r][c] = randType();
+    }
+  }
+
+  const canvas = $('board');
   const ctx = canvas.getContext('2d');
   const CELL = canvas.width / COLS;
 
@@ -46,7 +60,7 @@
   }
   function randNoMatch(r, c) {
     let t;
-    do { t = (Math.random() * TYPES) | 0; }
+    do { t = randType(); }
     while (
       (c >= 2 && grid[r][c - 1] === t && grid[r][c - 2] === t) ||
       (r >= 2 && grid[r - 1][c] === t && grid[r - 2][c] === t)
@@ -109,18 +123,18 @@
     matches.forEach(p => { grid[p.r][p.c] = null; });
     draw();
     await sleep(120);
-    // gravity
-    for (let c = 0; c < COLS; c++) {
-      let write = ROWS - 1;
-      for (let r = ROWS - 1; r >= 0; r--) {
-        if (grid[r][c] !== null) { grid[write][c] = grid[r][c]; write--; }
-      }
-      for (let r = write; r >= 0; r--) grid[r][c] = (Math.random() * TYPES) | 0;
-    }
+    applyGravity();
     draw();
     updateHUD();
     await sleep(140);
     return resolveBoard(chain + 1);
+  }
+
+  // resolve cascades, then refresh the HUD and check win/lose state
+  async function settle() {
+    await resolveBoard();
+    updateHUD();
+    checkEnd();
   }
 
   async function trySwap(a, b) {
@@ -131,9 +145,7 @@
       swap(a, b); draw(); busy = false; return;
     }
     moves--;
-    await resolveBoard();
-    updateHUD();
-    checkEnd();
+    await settle();
     busy = false;
   }
   function swap(a, b) {
@@ -147,16 +159,16 @@
     if (score >= target) {
       levelOver = true;
       const stars = score >= target * 1.5 ? 3 : score >= target * 1.2 ? 2 : 1;
-      document.getElementById('win-stars').textContent = '⭐'.repeat(stars);
+      $('win-stars').textContent = '⭐'.repeat(stars);
       const coinsEarned = 20 + stars * 10;
       S.coins += coinsEarned; save();
-      document.getElementById('win-text').textContent =
+      $('win-text').textContent =
         `Score: ${score.toLocaleString()} — you earned 🪙 ${coinsEarned}!`;
       openModal('win-modal');
       updateHUD();
     } else if (moves <= 0) {
       levelOver = true;
-      document.getElementById('oom-remaining').textContent =
+      $('oom-remaining').textContent =
         (target - score).toLocaleString();
       openModal('oom-modal');
     }
@@ -201,7 +213,7 @@
   // ---------- boosters ----------
   const boosterBtns = { hammer: 'booster-hammer', bomb: 'booster-bomb', shuffle: 'booster-shuffle' };
   Object.entries(boosterBtns).forEach(([name, id]) => {
-    document.getElementById(id).addEventListener('click', () => {
+    $(id).addEventListener('click', () => {
       if (busy || levelOver) return;
       if (S.boosters[name] <= 0) { openShop('boosters'); return; }
       if (name === 'shuffle') {
@@ -215,11 +227,11 @@
   });
   function refreshBoosterUI() {
     Object.entries(boosterBtns).forEach(([name, id]) => {
-      document.getElementById(id).classList.toggle('armed', armedBooster === name);
+      $(id).classList.toggle('armed', armedBooster === name);
     });
-    document.getElementById('hammer-count').textContent = S.boosters.hammer;
-    document.getElementById('bomb-count').textContent = S.boosters.bomb;
-    document.getElementById('shuffle-count').textContent = S.boosters.shuffle;
+    $('hammer-count').textContent = S.boosters.hammer;
+    $('bomb-count').textContent = S.boosters.bomb;
+    $('shuffle-count').textContent = S.boosters.shuffle;
   }
   async function useArmedBooster(cell) {
     const name = armedBooster;
@@ -236,16 +248,9 @@
     }
     draw();
     await sleep(150);
-    for (let c = 0; c < COLS; c++) {
-      let write = ROWS - 1;
-      for (let r = ROWS - 1; r >= 0; r--)
-        if (grid[r][c] !== null) { grid[write][c] = grid[r][c]; write--; }
-      for (let r = write; r >= 0; r--) grid[r][c] = (Math.random() * TYPES) | 0;
-    }
+    applyGravity();
     draw();
-    await resolveBoard();
-    updateHUD();
-    checkEnd();
+    await settle();
     busy = false;
   }
   function shuffleBoard() {
@@ -256,7 +261,7 @@
     }
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) grid[r][c] = flat[r * COLS + c];
     draw();
-    resolveBoard().then(() => { updateHUD(); checkEnd(); });
+    settle();
   }
 
   // ---------- economy / shop ----------
@@ -280,14 +285,18 @@
     ],
   };
 
-  function openShop(tab) {
+  // highlight the active shop tab and render its contents
+  function selectShopTab(tab) {
     document.querySelectorAll('.shop-tabs .tab').forEach(b =>
       b.classList.toggle('active', b.dataset.tab === tab));
     renderShop(tab);
+  }
+  function openShop(tab) {
+    selectShopTab(tab);
     openModal('shop-modal');
   }
   function renderShop(tab) {
-    const gridEl = document.getElementById('shop-grid');
+    const gridEl = $('shop-grid');
     gridEl.innerHTML = '';
     SHOP[tab].forEach(item => {
       const el = document.createElement('div');
@@ -318,14 +327,10 @@
   }
 
   document.querySelectorAll('.shop-tabs .tab').forEach(btn =>
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.shop-tabs .tab').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      renderShop(btn.dataset.tab);
-    }));
+    btn.addEventListener('click', () => selectShopTab(btn.dataset.tab)));
 
   // out-of-moves conversion point
-  document.getElementById('buy-moves-btn').addEventListener('click', () => {
+  $('buy-moves-btn').addEventListener('click', () => {
     if (S.coins < 100) { closeModal('oom-modal'); openShop('coins'); return; }
     S.coins -= 100; save();
     moves += 5; levelOver = false;
@@ -333,13 +338,13 @@
     updateHUD();
     toast('➕ 5 extra moves!');
   });
-  document.getElementById('give-up-btn').addEventListener('click', () => {
+  $('give-up-btn').addEventListener('click', () => {
     loseLife();
     closeModal('oom-modal');
     if (S.lives <= 0) showLivesModal();
     else startLevel();
   });
-  document.getElementById('next-level-btn').addEventListener('click', () => {
+  $('next-level-btn').addEventListener('click', () => {
     S.level++; save();
     closeModal('win-modal');
     startLevel();
@@ -350,15 +355,15 @@
   function tickLives() {
     if (S.lives < MAX_LIVES && Date.now() - S.lastLifeAt >= LIFE_REGEN_MS) {
       S.lives++; S.lastLifeAt = Date.now(); save();
-      if (!document.getElementById('lives-modal').classList.contains('hidden') && S.lives > 0) {
+      if (!$('lives-modal').classList.contains('hidden') && S.lives > 0) {
         closeModal('lives-modal'); startLevel();
       }
     }
-    const el = document.getElementById('life-timer');
+    const el = $('life-timer');
     if (S.lives < MAX_LIVES) {
       const remain = Math.max(0, LIFE_REGEN_MS - (Date.now() - S.lastLifeAt));
       el.textContent = fmt(remain);
-      const modalTimer = document.getElementById('lives-modal-timer');
+      const modalTimer = $('lives-modal-timer');
       if (modalTimer) modalTimer.textContent = fmt(remain);
     } else el.textContent = '';
     updateHUD();
@@ -370,23 +375,23 @@
   function tickSale() {
     let remain = saleEnd - Date.now();
     if (remain <= 0) { saleEnd = Date.now() + 10 * 60 * 1000; remain = 10 * 60 * 1000; }
-    document.getElementById('sale-timer').textContent = fmt(remain);
+    $('sale-timer').textContent = fmt(remain);
   }
 
   // ---------- UI helpers ----------
   function updateHUD() {
-    document.getElementById('coins-count').textContent = S.coins.toLocaleString();
-    document.getElementById('lives-count').textContent = S.lives;
-    document.getElementById('level-num').textContent = S.level;
-    document.getElementById('score').textContent = score.toLocaleString();
-    document.getElementById('target-score').textContent = target.toLocaleString();
-    document.getElementById('moves').textContent = moves;
-    document.getElementById('progress-bar').style.width =
+    $('coins-count').textContent = S.coins.toLocaleString();
+    $('lives-count').textContent = S.lives;
+    $('level-num').textContent = S.level;
+    $('score').textContent = score.toLocaleString();
+    $('target-score').textContent = target.toLocaleString();
+    $('moves').textContent = moves;
+    $('progress-bar').style.width =
       Math.min(100, (score / target) * 100) + '%';
     refreshBoosterUI();
   }
-  function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
-  function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+  function openModal(id) { $(id).classList.remove('hidden'); }
+  function closeModal(id) { $(id).classList.add('hidden'); }
   document.querySelectorAll('[data-close]').forEach(b =>
     b.addEventListener('click', () => b.closest('.modal').classList.add('hidden')));
   document.querySelectorAll('[data-open="shop"]').forEach(b =>
@@ -396,7 +401,7 @@
     }));
   let toastTimer;
   function toast(msg) {
-    const t = document.getElementById('toast');
+    const t = $('toast');
     t.textContent = msg; t.classList.remove('hidden');
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => t.classList.add('hidden'), 2200);
