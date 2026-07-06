@@ -17,11 +17,23 @@
     lastLifeAt: Date.now(),
   };
   let S = load();
+  function sanitizeState(s) {
+    s.coins  = Number.isFinite(s.coins)  ? Math.max(0, Math.floor(s.coins))  : defaults.coins;
+    s.lives  = Number.isFinite(s.lives)  ? Math.max(0, Math.min(MAX_LIVES, Math.floor(s.lives)))  : defaults.lives;
+    s.level  = Number.isFinite(s.level)  && s.level >= 1 ? Math.floor(s.level) : defaults.level;
+    s.lastLifeAt = Number.isFinite(s.lastLifeAt) ? s.lastLifeAt : Date.now();
+    if (!s.boosters || typeof s.boosters !== 'object') s.boosters = { ...defaults.boosters };
+    for (const k of ['hammer', 'bomb', 'shuffle']) {
+      s.boosters[k] = Number.isFinite(s.boosters[k]) ? Math.max(0, Math.floor(s.boosters[k])) : defaults.boosters[k];
+    }
+    return s;
+  }
   function load() {
     try {
       const raw = localStorage.getItem('candyblast');
-      return raw ? Object.assign({}, defaults, JSON.parse(raw)) : { ...defaults };
-    } catch { return { ...defaults }; }
+      if (!raw) return { ...defaults, boosters: { ...defaults.boosters } };
+      return sanitizeState(Object.assign({}, defaults, JSON.parse(raw)));
+    } catch { return { ...defaults, boosters: { ...defaults.boosters } }; }
   }
   function save() { localStorage.setItem('candyblast', JSON.stringify(S)); }
 
@@ -292,11 +304,33 @@
     SHOP[tab].forEach(item => {
       const el = document.createElement('div');
       el.className = 'shop-item';
-      el.innerHTML = `${item.badge ? `<span class="badge">${item.badge}</span>` : ''}
-        <div class="item-icon">${item.icon}</div>
-        <div class="item-name">${item.name}</div>
-        <div style="font-size:12px;color:#888">${item.amount}</div>
-        <div class="item-price">${item.price}</div>`;
+
+      if (item.badge) {
+        const badge = document.createElement('span');
+        badge.className = 'badge';
+        badge.textContent = item.badge;
+        el.appendChild(badge);
+      }
+      const icon = document.createElement('div');
+      icon.className = 'item-icon';
+      icon.textContent = item.icon;
+      el.appendChild(icon);
+
+      const name = document.createElement('div');
+      name.className = 'item-name';
+      name.textContent = item.name;
+      el.appendChild(name);
+
+      const desc = document.createElement('div');
+      desc.style.cssText = 'font-size:12px;color:#888';
+      desc.textContent = item.amount;
+      el.appendChild(desc);
+
+      const price = document.createElement('div');
+      price.className = 'item-price';
+      price.textContent = item.price;
+      el.appendChild(price);
+
       el.addEventListener('click', () => buy(item));
       gridEl.appendChild(el);
     });
