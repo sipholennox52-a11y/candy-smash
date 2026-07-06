@@ -7,7 +7,9 @@
   const MAX_LIVES = 5;
 
   const canvas = document.getElementById('board');
+  if (!canvas) { console.error('Missing <canvas id="board"> element'); return; }
   const ctx = canvas.getContext('2d');
+  if (!ctx) { console.error('Failed to get 2D rendering context'); return; }
   const CELL = canvas.width / COLS;
 
   // ---------- persistent state ----------
@@ -20,10 +22,25 @@
   function load() {
     try {
       const raw = localStorage.getItem('candyblast');
-      return raw ? Object.assign({}, defaults, JSON.parse(raw)) : { ...defaults };
-    } catch { return { ...defaults }; }
+      if (!raw) return { ...defaults };
+      const parsed = JSON.parse(raw);
+      if (typeof parsed !== 'object' || parsed === null) {
+        console.warn('Corrupt save data (not an object) — resetting to defaults');
+        return { ...defaults };
+      }
+      return Object.assign({}, defaults, parsed);
+    } catch (err) {
+      console.warn('Failed to load save data — resetting to defaults:', err);
+      return { ...defaults };
+    }
   }
-  function save() { localStorage.setItem('candyblast', JSON.stringify(S)); }
+  function save() {
+    try {
+      localStorage.setItem('candyblast', JSON.stringify(S));
+    } catch (err) {
+      console.warn('Failed to save game state (storage may be full or unavailable):', err);
+    }
+  }
 
   // ---------- level state ----------
   let grid = [], score = 0, moves = 0, target = 0;
@@ -125,16 +142,21 @@
 
   async function trySwap(a, b) {
     busy = true;
-    swap(a, b); draw();
-    await sleep(120);
-    if (findMatches().length === 0) {
-      swap(a, b); draw(); busy = false; return;
+    try {
+      swap(a, b); draw();
+      await sleep(120);
+      if (findMatches().length === 0) {
+        swap(a, b); draw(); return;
+      }
+      moves--;
+      await resolveBoard();
+      updateHUD();
+      checkEnd();
+    } catch (err) {
+      console.error('Error during swap:', err);
+    } finally {
+      busy = false;
     }
-    moves--;
-    await resolveBoard();
-    updateHUD();
-    checkEnd();
-    busy = false;
   }
   function swap(a, b) {
     const t = grid[a.r][a.c];
@@ -165,7 +187,8 @@
   // ---------- input ----------
   function cellFromEvent(e) {
     const rect = canvas.getBoundingClientRect();
-    const pt = e.touches ? e.touches[0] : e;
+    const pt = e.touches && e.touches.length > 0 ? e.touches[0] : e;
+    if (!pt || pt.clientX === undefined) return null;
     const c = Math.floor((pt.clientX - rect.left) / rect.width * COLS);
     const r = Math.floor((pt.clientY - rect.top) / rect.height * ROWS);
     if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return null;
@@ -227,26 +250,31 @@
     S.boosters[name]--; save();
     refreshBoosterUI();
     busy = true;
-    if (name === 'hammer') {
-      grid[cell.r][cell.c] = null; score += 40;
-    } else if (name === 'bomb') {
-      for (let r = cell.r - 1; r <= cell.r + 1; r++)
-        for (let c = cell.c - 1; c <= cell.c + 1; c++)
-          if (r >= 0 && r < ROWS && c >= 0 && c < COLS) { grid[r][c] = null; score += 40; }
+    try {
+      if (name === 'hammer') {
+        grid[cell.r][cell.c] = null; score += 40;
+      } else if (name === 'bomb') {
+        for (let r = cell.r - 1; r <= cell.r + 1; r++)
+          for (let c = cell.c - 1; c <= cell.c + 1; c++)
+            if (r >= 0 && r < ROWS && c >= 0 && c < COLS) { grid[r][c] = null; score += 40; }
+      }
+      draw();
+      await sleep(150);
+      for (let c = 0; c < COLS; c++) {
+        let write = ROWS - 1;
+        for (let r = ROWS - 1; r >= 0; r--)
+          if (grid[r][c] !== null) { grid[write][c] = grid[r][c]; write--; }
+        for (let r = write; r >= 0; r--) grid[r][c] = (Math.random() * TYPES) | 0;
+      }
+      draw();
+      await resolveBoard();
+      updateHUD();
+      checkEnd();
+    } catch (err) {
+      console.error('Error using booster:', err);
+    } finally {
+      busy = false;
     }
-    draw();
-    await sleep(150);
-    for (let c = 0; c < COLS; c++) {
-      let write = ROWS - 1;
-      for (let r = ROWS - 1; r >= 0; r--)
-        if (grid[r][c] !== null) { grid[write][c] = grid[r][c]; write--; }
-      for (let r = write; r >= 0; r--) grid[r][c] = (Math.random() * TYPES) | 0;
-    }
-    draw();
-    await resolveBoard();
-    updateHUD();
-    checkEnd();
-    busy = false;
   }
   function shuffleBoard() {
     const flat = grid.flat();
@@ -256,7 +284,9 @@
     }
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) grid[r][c] = flat[r * COLS + c];
     draw();
-    resolveBoard().then(() => { updateHUD(); checkEnd(); });
+    resolveBoard()
+      .then(() => { updateHUD(); checkEnd(); })
+      .catch(err => console.error('Error resolving board after shuffle:', err));
   }
 
   // ---------- economy / shop ----------
@@ -288,8 +318,11 @@
   }
   function renderShop(tab) {
     const gridEl = document.getElementById('shop-grid');
+    if (!gridEl) { console.error('Missing #shop-grid element'); return; }
     gridEl.innerHTML = '';
-    SHOP[tab].forEach(item => {
+    const items = SHOP[tab];
+    if (!items) { console.warn('Unknown shop tab:', tab); return; }
+    items.forEach(item => {
       const el = document.createElement('div');
       el.className = 'shop-item';
       el.innerHTML = `${item.badge ? `<span class="badge">${item.badge}</span>` : ''}
@@ -302,18 +335,23 @@
     });
   }
   function buy(item) {
-    if (item.real) {
-      // Production: launch Stripe Checkout / platform IAP here.
-      if (item.coins) S.coins += item.coins;
-      if (item.effect) item.effect();
-      save(); updateHUD(); refreshBoosterUI();
-      toast(`✅ Purchase successful! (${item.price} — simulated)`);
-    } else {
-      if (S.coins < item.cost) { toast('Not enough coins — grab a coin pack!'); openShop('coins'); return; }
-      S.coins -= item.cost;
-      item.effect();
-      save(); updateHUD(); refreshBoosterUI();
-      toast(`✅ ${item.name} purchased!`);
+    try {
+      if (item.real) {
+        // Production: launch Stripe Checkout / platform IAP here.
+        if (item.coins) S.coins += item.coins;
+        if (typeof item.effect === 'function') item.effect();
+        save(); updateHUD(); refreshBoosterUI();
+        toast(`✅ Purchase successful! (${item.price} — simulated)`);
+      } else {
+        if (S.coins < item.cost) { toast('Not enough coins — grab a coin pack!'); openShop('coins'); return; }
+        S.coins -= item.cost;
+        if (typeof item.effect === 'function') item.effect();
+        save(); updateHUD(); refreshBoosterUI();
+        toast(`✅ ${item.name} purchased!`);
+      }
+    } catch (err) {
+      console.error('Purchase failed:', err);
+      toast('❌ Something went wrong with your purchase.');
     }
   }
 
