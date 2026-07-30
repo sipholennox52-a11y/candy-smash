@@ -1,0 +1,14 @@
+{
+  "name": "Candy Blast Saga",
+  "short_name": "Candy Blast",
+  "description": "A colorful match-3 puzzle game.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#6a11cb",
+  "theme_color": "#6a11cb",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

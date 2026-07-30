@@ -6,9 +6,34 @@
   const LIFE_REGEN_MS = 60 * 1000; // 1 min for demo; 30 min in production
   const MAX_LIVES = 5;
 
+  const NAMES = ['candy', 'lollipop', 'chocolate', 'donut', 'cupcake', 'cookie'];
+
   const canvas = document.getElementById('board');
   const ctx = canvas.getContext('2d');
   const CELL = canvas.width / COLS;
+  const srLive = document.getElementById('sr-live');
+  function announce(msg) { if (srLive) { srLive.textContent = ''; srLive.textContent = msg; } }
+
+  // ---------- accessibility preferences ----------
+  const prefsDefaults = {
+    reduceMotion: !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches),
+    highContrast: false,
+  };
+  function loadPrefs() {
+    try {
+      const raw = localStorage.getItem('candyblast_prefs');
+      if (!raw) return { ...prefsDefaults };
+      const p = JSON.parse(raw);
+      return { reduceMotion: !!p.reduceMotion, highContrast: !!p.highContrast };
+    } catch { return { ...prefsDefaults }; }
+  }
+  let prefs = loadPrefs();
+  function savePrefs() { try { localStorage.setItem('candyblast_prefs', JSON.stringify(prefs)); } catch {} }
+  function applyPrefs() {
+    document.body.classList.toggle('reduce-motion', prefs.reduceMotion);
+    document.body.classList.toggle('high-contrast', prefs.highContrast);
+  }
+  applyPrefs();
 
   // ---------- persistent state ----------
   const defaults = {
@@ -35,11 +60,18 @@
       return sanitizeState(Object.assign({}, defaults, JSON.parse(raw)));
     } catch { return { ...defaults, boosters: { ...defaults.boosters } }; }
   }
-  function save() { localStorage.setItem('candyblast', JSON.stringify(S)); }
+  function save() {
+    try {
+      localStorage.setItem('candyblast', JSON.stringify(S));
+    } catch (e) {
+      // Storage blocked or full (private mode / quota): keep playing in-memory.
+    }
+  }
 
   // ---------- level state ----------
   let grid = [], score = 0, moves = 0, target = 0;
   let selected = null, armedBooster = null, busy = false, levelOver = false;
+  let cursor = { r: 0, c: 0 }, boardFocused = false;
 
   function levelConfig(n) {
     return { target: 800 + n * 400, moves: Math.max(12, 24 - Math.floor(n / 3)) };
@@ -74,20 +106,31 @@
         ctx.fillStyle = 'rgba(255,255,255,0.06)';
         ctx.fillRect(c * CELL, r * CELL, CELL, CELL);
       }
+      const isCur = boardFocused && cursor.r === r && cursor.c === c;
       const t = grid[r][c];
-      if (t === null || t === undefined) continue;
+      if (t === null || t === undefined) { if (isCur) drawCursor(r, c); continue; }
       const x = c * CELL + CELL / 2, y = r * CELL + CELL / 2;
       const isSel = selected && selected.r === r && selected.c === c;
       const isHl = highlight && highlight.some(p => p.r === r && p.c === c);
       ctx.beginPath();
       ctx.arc(x, y, CELL * (isSel ? 0.46 : 0.4), 0, Math.PI * 2);
-      ctx.fillStyle = isHl ? '#fff' : COLORS[t] + '55';
+      ctx.fillStyle = isHl ? '#fff' : COLORS[t] + (prefs.highContrast ? 'ff' : '55');
       ctx.fill();
+      if (prefs.highContrast) { ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke(); }
       if (isSel) { ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.stroke(); }
       ctx.font = `${CELL * 0.6}px serif`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(EMOJI[t], x, y + 2);
+      if (isCur) drawCursor(r, c);
     }
+  }
+  function drawCursor(r, c) {
+    ctx.save();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([6, 4]);
+    ctx.strokeRect(c * CELL + 3, r * CELL + 3, CELL - 6, CELL - 6);
+    ctx.restore();
   }
 
   // ---------- match logic ----------
@@ -140,12 +183,13 @@
     swap(a, b); draw();
     await sleep(120);
     if (findMatches().length === 0) {
-      swap(a, b); draw(); busy = false; return;
+      swap(a, b); draw(); busy = false; announce('No match. Try again.'); return;
     }
     moves--;
     await resolveBoard();
     updateHUD();
     checkEnd();
+    if (!levelOver) announce(`Matched! Score ${score}. ${moves} moves left.`);
     busy = false;
   }
   function swap(a, b) {
@@ -164,12 +208,14 @@
       S.coins += coinsEarned; save();
       document.getElementById('win-text').textContent =
         `Score: ${score.toLocaleString()} — you earned 🪙 ${coinsEarned}!`;
+      announce(`Level complete! ${stars} star${stars > 1 ? 's' : ''}. You earned ${coinsEarned} coins.`);
       openModal('win-modal');
       updateHUD();
     } else if (moves <= 0) {
       levelOver = true;
       document.getElementById('oom-remaining').textContent =
         (target - score).toLocaleString();
+      announce(`Out of moves. You needed ${(target - score).toLocaleString()} more points.`);
       openModal('oom-modal');
     }
   }
@@ -209,6 +255,50 @@
   function isAdjacent(a, b) {
     return Math.abs(a.r - b.r) + Math.abs(a.c - b.c) === 1;
   }
+
+  // ---------- keyboard play (accessibility) ----------
+  canvas.addEventListener('focus', () => { boardFocused = true; announceCursor(); draw(); });
+  canvas.addEventListener('blur', () => { boardFocused = false; draw(); });
+  function announceCursor() {
+    const t = grid[cursor.r] && grid[cursor.r][cursor.c];
+    const label = (t === null || t === undefined) ? 'empty' : NAMES[t];
+    announce(`${label}, row ${cursor.r + 1}, column ${cursor.c + 1}`);
+  }
+  canvas.addEventListener('keydown', e => {
+    const moveKeys = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
+    if (moveKeys[e.key]) {
+      e.preventDefault();
+      if (busy || levelOver) return;
+      const [dr, dc] = moveKeys[e.key];
+      cursor = {
+        r: Math.max(0, Math.min(ROWS - 1, cursor.r + dr)),
+        c: Math.max(0, Math.min(COLS - 1, cursor.c + dc)),
+      };
+      draw();
+      announceCursor();
+      return;
+    }
+    if (e.key === ' ' || e.key === 'Enter') {
+      e.preventDefault();
+      if (busy || levelOver) return;
+      const cell = { r: cursor.r, c: cursor.c };
+      if (armedBooster) { useArmedBooster(cell); return; }
+      if (!selected) {
+        selected = cell;
+        announce(`Selected ${NAMES[grid[cell.r][cell.c]]}. Move to an adjacent candy and press Space to swap.`);
+        draw();
+      } else if (selected.r === cell.r && selected.c === cell.c) {
+        selected = null; announce('Deselected'); draw();
+      } else if (isAdjacent(selected, cell)) {
+        const a = selected; selected = null;
+        trySwap(a, cell);
+      } else {
+        selected = cell; announce(`Selected ${NAMES[grid[cell.r][cell.c]]}`); draw();
+      }
+      return;
+    }
+    if (e.key === 'Escape' && selected) { e.preventDefault(); selected = null; announce('Deselected'); draw(); }
+  });
 
   // ---------- boosters ----------
   const boosterBtns = { hammer: 'booster-hammer', bomb: 'booster-bomb', shuffle: 'booster-shuffle' };
@@ -293,8 +383,11 @@
   };
 
   function openShop(tab) {
-    document.querySelectorAll('.shop-tabs .tab').forEach(b =>
-      b.classList.toggle('active', b.dataset.tab === tab));
+    document.querySelectorAll('.shop-tabs .tab').forEach(b => {
+      const on = b.dataset.tab === tab;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
     renderShop(tab);
     openModal('shop-modal');
   }
@@ -353,8 +446,12 @@
 
   document.querySelectorAll('.shop-tabs .tab').forEach(btn =>
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.shop-tabs .tab').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.shop-tabs .tab').forEach(b => {
+        b.classList.remove('active');
+        b.setAttribute('aria-selected', 'false');
+      });
       btn.classList.add('active');
+      btn.setAttribute('aria-selected', 'true');
       renderShop(btn.dataset.tab);
     }));
 
@@ -399,14 +496,6 @@
   }
   function showLivesModal() { openModal('lives-modal'); }
 
-  // ---------- sale countdown (FOMO) ----------
-  let saleEnd = Date.now() + 10 * 60 * 1000;
-  function tickSale() {
-    let remain = saleEnd - Date.now();
-    if (remain <= 0) { saleEnd = Date.now() + 10 * 60 * 1000; remain = 10 * 60 * 1000; }
-    document.getElementById('sale-timer').textContent = fmt(remain);
-  }
-
   // ---------- UI helpers ----------
   function updateHUD() {
     document.getElementById('coins-count').textContent = S.coins.toLocaleString();
@@ -415,14 +504,50 @@
     document.getElementById('score').textContent = score.toLocaleString();
     document.getElementById('target-score').textContent = target.toLocaleString();
     document.getElementById('moves').textContent = moves;
-    document.getElementById('progress-bar').style.width =
-      Math.min(100, (score / target) * 100) + '%';
+    const pct = target > 0 ? Math.min(100, (score / target) * 100) : 0;
+    document.getElementById('progress-bar').style.width = pct + '%';
+    const pw = document.getElementById('progress-wrap');
+    if (pw) pw.setAttribute('aria-valuenow', String(Math.round(pct)));
     refreshBoosterUI();
   }
-  function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
-  function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+  // ---------- modal focus management (accessibility) ----------
+  let modalReturnFocus = null;
+  function focusables(container) {
+    return [...container.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+      .filter(el => el.offsetParent !== null);
+  }
+  function openModal(id) {
+    const m = document.getElementById(id);
+    if (!m.classList.contains('hidden')) return;
+    modalReturnFocus = document.activeElement;
+    m.classList.remove('hidden');
+    const f = focusables(m.querySelector('.modal-card') || m);
+    if (f.length) f[0].focus();
+  }
+  function closeModal(id) {
+    document.getElementById(id).classList.add('hidden');
+    if (modalReturnFocus && typeof modalReturnFocus.focus === 'function') {
+      modalReturnFocus.focus();
+      modalReturnFocus = null;
+    }
+  }
+  document.addEventListener('keydown', e => {
+    const open = [...document.querySelectorAll('.modal:not(.hidden)')].pop();
+    if (!open) return;
+    if (e.key === 'Escape' && open.querySelector('[data-close]')) {
+      e.preventDefault(); closeModal(open.id); return;
+    }
+    if (e.key === 'Tab') {
+      const f = focusables(open.querySelector('.modal-card') || open);
+      if (!f.length) return;
+      const first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  });
   document.querySelectorAll('[data-close]').forEach(b =>
-    b.addEventListener('click', () => b.closest('.modal').classList.add('hidden')));
+    b.addEventListener('click', () => closeModal(b.closest('.modal').id)));
   document.querySelectorAll('[data-open="shop"]').forEach(b =>
     b.addEventListener('click', () => {
       b.closest('.modal')?.classList.add('hidden');
@@ -439,12 +564,46 @@
     const s = Math.ceil(ms / 1000);
     return `${String((s / 60) | 0).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
   }
-  function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
+  function sleep(ms) { return new Promise(res => setTimeout(res, prefs.reduceMotion ? 0 : ms)); }
+
+  // ---------- settings ----------
+  function openSettings() {
+    document.getElementById('reduce-motion-toggle').checked = prefs.reduceMotion;
+    document.getElementById('high-contrast-toggle').checked = prefs.highContrast;
+    openModal('settings-modal');
+  }
+  document.getElementById('settings-btn').addEventListener('click', openSettings);
+  document.getElementById('settings-link').addEventListener('click', openSettings);
+  document.getElementById('reduce-motion-toggle').addEventListener('change', e => {
+    prefs.reduceMotion = e.target.checked; savePrefs(); applyPrefs();
+  });
+  document.getElementById('high-contrast-toggle').addEventListener('change', e => {
+    prefs.highContrast = e.target.checked; savePrefs(); applyPrefs(); draw();
+  });
+  document.getElementById('reset-data-btn').addEventListener('click', () => {
+    if (!window.confirm('Reset all game data? This cannot be undone.')) return;
+    try { localStorage.removeItem('candyblast'); } catch {}
+    S = { ...defaults, boosters: { ...defaults.boosters }, lastLifeAt: Date.now() };
+    save(); closeModal('settings-modal'); startLevel(); updateHUD();
+    toast('🗑️ Game data reset'); announce('Game data reset.');
+  });
+
+  // ---------- first-run welcome / disclosures ----------
+  const WELCOME_KEY = 'candyblast_welcomed';
+  document.getElementById('welcome-accept').addEventListener('click', () => {
+    try { localStorage.setItem(WELCOME_KEY, '1'); } catch {}
+    closeModal('welcome-modal');
+    canvas.focus();
+  });
+  function maybeShowWelcome() {
+    let seen = false;
+    try { seen = localStorage.getItem(WELCOME_KEY) === '1'; } catch {}
+    if (!seen) openModal('welcome-modal');
+  }
 
   // ---------- boot ----------
   setInterval(tickLives, 1000);
-  setInterval(tickSale, 1000);
-  tickSale();
   if (S.lives <= 0) { startLevel(); showLivesModal(); }
   else startLevel();
+  maybeShowWelcome();
 })();

@@ -2,53 +2,119 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; connect-src 'self'" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; connect-src 'self'; manifest-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" />
+<meta name="description" content="Candy Blast Saga — a colorful match-3 puzzle game." />
+<meta name="color-scheme" content="light dark" />
+<meta name="theme-color" content="#6a11cb" />
 <title>Candy Blast Saga</title>
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" href="icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="icon.svg" />
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+  <a class="skip-link" href="#board">Skip to game board</a>
+
   <div id="app">
     <header id="topbar">
       <div class="stat" id="lives-stat" title="Lives">
-        <span class="icon">❤️</span><span id="lives-count">5</span>
+        <span class="icon" aria-hidden="true">❤️</span>
+        <span id="lives-count" aria-label="Lives remaining">5</span>
         <span id="life-timer" class="timer"></span>
-        <button class="plus-btn" data-open="shop" data-tab="lives">+</button>
+        <button class="plus-btn" data-open="shop" data-tab="lives" aria-label="Get more lives">+</button>
       </div>
-      <div class="stat" id="level-stat"><span class="icon">🏆</span>Level <span id="level-num">1</span></div>
+      <div class="stat" id="level-stat"><span class="icon" aria-hidden="true">🏆</span>Level <span id="level-num">1</span></div>
       <div class="stat" id="coins-stat" title="Coins">
-        <span class="icon">🪙</span><span id="coins-count">50</span>
-        <button class="plus-btn" data-open="shop" data-tab="coins">+</button>
+        <span class="icon" aria-hidden="true">🪙</span>
+        <span id="coins-count" aria-label="Coins">50</span>
+        <button class="plus-btn" data-open="shop" data-tab="coins" aria-label="Get more coins">+</button>
+        <button class="icon-btn" id="settings-btn" aria-label="Settings" aria-haspopup="dialog">⚙️</button>
       </div>
     </header>
 
-    <section id="hud">
+    <section id="hud" aria-label="Level status">
       <div class="hud-item"><div class="hud-label">Target</div><div class="hud-value" id="target-score">1000</div></div>
       <div class="hud-item"><div class="hud-label">Score</div><div class="hud-value" id="score">0</div></div>
       <div class="hud-item"><div class="hud-label">Moves</div><div class="hud-value" id="moves">20</div></div>
     </section>
-    <div id="progress-wrap"><div id="progress-bar"></div></div>
+    <div id="progress-wrap" role="progressbar" aria-label="Level progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progress-bar"></div></div>
 
-    <canvas id="board" width="480" height="480"></canvas>
+    <canvas id="board" width="480" height="480" role="application"
+            tabindex="0" aria-label="Match-3 board, 8 by 8. Use arrow keys to move the cursor, Space or Enter to select and swap adjacent candies."></canvas>
+    <p id="board-instructions" class="sr-only">
+      Use the arrow keys to move the cursor across the board. Press Space or Enter to pick up a
+      candy, then move to an adjacent candy and press Space or Enter again to swap them.
+    </p>
 
-    <section id="boosters">
-      <button class="booster" id="booster-hammer" title="Hammer: smash any candy">🔨<span class="booster-count" id="hammer-count">1</span></button>
-      <button class="booster" id="booster-bomb" title="Bomb: blast a 3x3 area">💣<span class="booster-count" id="bomb-count">1</span></button>
-      <button class="booster" id="booster-shuffle" title="Shuffle the board">🔀<span class="booster-count" id="shuffle-count">1</span></button>
+    <section id="boosters" aria-label="Boosters">
+      <button class="booster" id="booster-hammer" aria-label="Hammer booster: smash any candy">🔨<span class="booster-count" id="hammer-count">1</span></button>
+      <button class="booster" id="booster-bomb" aria-label="Bomb booster: blast a 3 by 3 area">💣<span class="booster-count" id="bomb-count">1</span></button>
+      <button class="booster" id="booster-shuffle" aria-label="Shuffle booster: reshuffle the board">🔀<span class="booster-count" id="shuffle-count">1</span></button>
       <button class="booster shop-cta" data-open="shop" data-tab="boosters">🛒 Shop</button>
     </section>
+
+    <footer id="site-footer">
+      <a href="privacy.html">Privacy</a>
+      <span aria-hidden="true">·</span>
+      <a href="terms.html">Terms</a>
+      <span aria-hidden="true">·</span>
+      <button class="link-btn" id="settings-link">Settings</button>
+      <span class="footer-note">Contains simulated in-app purchases · No data collected</span>
+    </footer>
+  </div>
+
+  <!-- Screen-reader live region for game announcements -->
+  <div id="sr-live" class="sr-only" role="status" aria-live="polite"></div>
+
+  <!-- First-run notice (age / purchases / data) -->
+  <div class="modal hidden" id="welcome-modal" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
+    <div class="modal-card">
+      <h2 id="welcome-title">🍬 Welcome to Candy Blast Saga</h2>
+      <p class="modal-lead">A quick heads-up before you play:</p>
+      <ul class="welcome-list">
+        <li>🛒 This game contains <strong>in-app purchases</strong> (simulated in this demo — no real charges).</li>
+        <li>🔒 We collect <strong>no personal data</strong>; progress is saved only on your device.</li>
+        <li>👨‍👩‍👧 If you're under 18, please play with a parent or guardian's permission.</li>
+      </ul>
+      <p class="welcome-links">
+        Read our <a href="privacy.html">Privacy Policy</a> and <a href="terms.html">Terms</a>.
+      </p>
+      <button class="cta-btn" id="welcome-accept">Let's play! 🎉</button>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div class="modal hidden" id="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <div class="modal-card">
+      <button class="close-btn" data-close aria-label="Close settings">✕</button>
+      <h2 id="settings-title">⚙️ Settings</h2>
+      <div class="setting-row">
+        <label for="reduce-motion-toggle">Reduce motion &amp; animations</label>
+        <input type="checkbox" id="reduce-motion-toggle" class="toggle" />
+      </div>
+      <div class="setting-row">
+        <label for="high-contrast-toggle">High-contrast board</label>
+        <input type="checkbox" id="high-contrast-toggle" class="toggle" />
+      </div>
+      <button class="ghost-btn" id="reset-data-btn">🗑️ Reset game data</button>
+      <p class="settings-legal">
+        <a href="privacy.html">Privacy Policy</a> · <a href="terms.html">Terms of Service</a>
+      </p>
+      <p class="settings-version">Candy Blast Saga · v1.0.0</p>
+    </div>
   </div>
 
   <!-- Shop modal -->
-  <div class="modal hidden" id="shop-modal">
+  <div class="modal hidden" id="shop-modal" role="dialog" aria-modal="true" aria-labelledby="shop-title">
     <div class="modal-card">
-      <button class="close-btn" data-close>✕</button>
-      <h2>🍬 Candy Shop</h2>
-      <div id="sale-banner">🔥 LIMITED TIME: +50% bonus coins! Ends in <span id="sale-timer">09:59</span></div>
-      <div class="shop-tabs">
-        <button class="tab active" data-tab="coins">Coins</button>
-        <button class="tab" data-tab="lives">Lives</button>
-        <button class="tab" data-tab="boosters">Boosters</button>
+      <button class="close-btn" data-close aria-label="Close shop">✕</button>
+      <h2 id="shop-title">🍬 Candy Shop</h2>
+      <div id="sale-banner">🍬 Coin packs include bonus value — see the Coins tab.</div>
+      <div class="shop-tabs" role="tablist" aria-label="Shop categories">
+        <button class="tab active" data-tab="coins" role="tab" aria-selected="true">Coins</button>
+        <button class="tab" data-tab="lives" role="tab" aria-selected="false">Lives</button>
+        <button class="tab" data-tab="boosters" role="tab" aria-selected="false">Boosters</button>
       </div>
       <div class="shop-grid" id="shop-grid"></div>
       <p class="shop-note">Purchases are simulated in this demo. Connect Stripe / Google Play Billing / Apple IAP in production.</p>
@@ -56,9 +122,9 @@
   </div>
 
   <!-- Out of moves modal -->
-  <div class="modal hidden" id="oom-modal">
+  <div class="modal hidden" id="oom-modal" role="dialog" aria-modal="true" aria-labelledby="oom-title">
     <div class="modal-card">
-      <h2>😱 Out of Moves!</h2>
+      <h2 id="oom-title">😱 Out of Moves!</h2>
       <p>You're <b id="oom-remaining"></b> points away from winning. Don't lose your progress!</p>
       <button class="cta-btn" id="buy-moves-btn">➕ Get 5 more moves — 🪙 100</button>
       <button class="ghost-btn" id="give-up-btn">Give up (lose 1 ❤️)</button>
@@ -66,10 +132,10 @@
   </div>
 
   <!-- Level complete modal -->
-  <div class="modal hidden" id="win-modal">
+  <div class="modal hidden" id="win-modal" role="dialog" aria-modal="true" aria-labelledby="win-title">
     <div class="modal-card">
-      <h2>🎉 Level Complete!</h2>
-      <div class="stars" id="win-stars">⭐⭐⭐</div>
+      <h2 id="win-title">🎉 Level Complete!</h2>
+      <div class="stars" id="win-stars" aria-hidden="true">⭐⭐⭐</div>
       <p id="win-text"></p>
       <button class="cta-btn" id="next-level-btn">Next Level ➡️</button>
       <button class="ghost-btn" data-open="shop" data-tab="boosters">Stock up on boosters</button>
@@ -77,9 +143,9 @@
   </div>
 
   <!-- Out of lives modal -->
-  <div class="modal hidden" id="lives-modal">
+  <div class="modal hidden" id="lives-modal" role="dialog" aria-modal="true" aria-labelledby="lives-title">
     <div class="modal-card">
-      <h2>💔 Out of Lives!</h2>
+      <h2 id="lives-title">💔 Out of Lives!</h2>
       <p>Next life in <span id="lives-modal-timer"></span></p>
       <button class="cta-btn" data-open="shop" data-tab="lives">Refill lives now 🪙</button>
       <button class="ghost-btn" data-close>Wait</button>
@@ -87,7 +153,7 @@
   </div>
 
   <!-- Purchase confirmation toast -->
-  <div id="toast" class="hidden"></div>
+  <div id="toast" class="hidden" role="status" aria-live="polite"></div>
 
   <script src="game.js"></script>
 </body>
