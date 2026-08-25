@@ -6,7 +6,7 @@
   "main": "game.js",
   "scripts": {
     "dev": "live-server --port=3000 --open ./",
-    "build": "mkdir -p dist && cpx \"**/*.{html,css,js,svg,png,ico}\" dist",
+    "build": "shx mkdir -p dist && cpx \"**/*.{html,css,js,svg,png,ico}\" dist",
     "preview": "serve dist -s -l 5000",
     "start": "npm run dev",
     "test": "echo \"No tests configured\" && exit 0",
@@ -33,7 +33,8 @@
     "cpx": "^1.5.0",
     "serve": "^14.2.0",
     "eslint": "^8.0.0",
-    "prettier": "^2.8.8"
+    "prettier": "^2.8.8",
+    "shx": "^0.3.4"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.1",
