@@ -1,16 +1,39 @@
 {
-  "name": "candy-blast",
+  "name": "candy-smash",
   "version": "1.0.0",
-  "description": "An addictive Candy Crush–style match-3 web game designed with a monetization funnel to turn players into buyers.",
+  "private": true,
+  "description": "An accessible match-3 web game inspired by Candy Crush.",
   "main": "game.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "live-server --port=3000 --open ./",
+    "build": "mkdir -p dist && cpx \"**/*.{html,css,js,svg,png,ico}\" dist",
+    "preview": "serve dist -s -l 5000",
+    "start": "npm run dev",
+    "test": "echo \"No tests configured\" && exit 0",
+    "lint": "eslint . --ext .js",
+    "format": "prettier --write .",
+    "capacitor:sync": "npx cap sync",
+    "capacitor:copy": "npx cap copy",
+    "capacitor:update": "npx cap update",
+    "capacitor:open:android": "npx cap open android",
+    "capacitor:open:ios": "npx cap open ios"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "game",
+    "match-3",
+    "accessibility",
+    "a11y",
+    "pwa"
+  ],
+  "author": "sipholennox52-a11y",
   "license": "ISC",
   "devDependencies": {
-    "@capacitor/cli": "^7.6.7"
+    "@capacitor/cli": "^7.6.7",
+    "live-server": "^1.2.2",
+    "cpx": "^1.5.0",
+    "serve": "^14.2.0",
+    "eslint": "^8.0.0",
+    "prettier": "^2.8.8"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.1",
